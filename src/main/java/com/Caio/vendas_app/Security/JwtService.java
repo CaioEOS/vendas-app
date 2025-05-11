@@ -1,9 +1,11 @@
 package com.Caio.vendas_app.Security;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.security.Key;
@@ -29,13 +31,17 @@ public class JwtService {
         return claimsResolver.apply(claims);
     }
 
-    // Extrai todas as claims do token
+    // Extrai todas as claims do token com tratamento de exceções
     private Claims extractAllClaims(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(getSignInKey())
-                .build()
-                .parseClaimsJws(token)
-                .getBody();
+        try {
+            return Jwts.parserBuilder()
+                    .setSigningKey(getSignInKey())
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Token inválido: " + e.getMessage(), e);
+        }
     }
 
     // Gera um token para um usuário
@@ -60,13 +66,20 @@ public class JwtService {
         return Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
     }
 
-    // Valida o token (opcional, se precisar usar no futuro)
-    public boolean validateToken(String token, String username) {
-        final String extractedUsername = getUsername(token);
-        return (extractedUsername.equals(username) && !isTokenExpired(token));
+    // Valida o token com UserDetails
+    public boolean validateToken(String token, UserDetails userDetails) {
+        final String username = getUsername(token);
+        return username != null && username.equals(userDetails.getUsername()) && !isTokenExpired(token);
     }
 
+    // Verifica se o token expirou
     private boolean isTokenExpired(String token) {
-        return extractClaim(token, Claims::getExpiration).before(new Date());
+        try {
+            return extractClaim(token, Claims::getExpiration).before(new Date());
+        } catch (ExpiredJwtException e) {
+            return true;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Erro ao verificar expiração: " + e.getMessage(), e);
+        }
     }
 }

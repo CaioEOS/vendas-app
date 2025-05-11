@@ -25,20 +25,41 @@ public class JwtFilter extends OncePerRequestFilter {
         final String token;
         final String username;
 
+        System.out.println("Authorization Header: " + authHeader); // Log do cabeçalho
+
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            System.out.println("Cabeçalho Authorization ausente ou inválido");
             chain.doFilter(request, response);
             return;
         }
 
         token = authHeader.substring(7);
-        username = jwtService.getUsername(token);
+        System.out.println("Token: " + token); // Log do token
 
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-            UsernamePasswordAuthenticationToken authToken =
-                    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-            authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-            SecurityContextHolder.getContext().setAuthentication(authToken);
+        try {
+            username = jwtService.getUsername(token);
+            System.out.println("Username extraído: " + username); // Log do username
+
+            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                if (jwtService.validateToken(token, userDetails)) { // Adicione validação
+                    UsernamePasswordAuthenticationToken authToken =
+                            new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                    System.out.println("Autenticação bem-sucedida para: " + username);
+                } else {
+                    System.out.println("Token inválido para: " + username);
+                    response.sendError(HttpServletResponse.SC_FORBIDDEN, "Token inválido");
+                    return;
+                }
+            } else {
+                System.out.println("Username nulo ou autenticação já existe");
+            }
+        } catch (Exception e) {
+            System.out.println("Erro ao processar token: " + e.getMessage());
+            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Erro ao processar token: " + e.getMessage());
+            return;
         }
 
         chain.doFilter(request, response);
